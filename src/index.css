@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-bg: #0A0A0A;
+  --color-ink: #FFFFFF;
+  --color-accent: #00FF00; /* Neon Green */
+  --color-muted: #666666;
+  --color-border: #222222;
+  --color-surface: #111111;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-accent text-bg px-4 py-2 font-mono font-bold uppercase tracking-wider hover:opacity-90 transition-all active:scale-95;
+  }
+  
+  .btn-outline {
+    @apply border border-border px-4 py-2 font-mono font-medium uppercase tracking-wider hover:bg-surface transition-all active:scale-95;
+  }
+  
+  .input-field {
+    @apply bg-surface border border-border px-4 py-2 font-mono text-sm focus:border-accent outline-none transition-all;
+  }
+  
+  .card {
+    @apply bg-surface border border-border p-6 hover:border-muted transition-all;
+  }
+}
+
