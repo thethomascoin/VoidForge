@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, Download, Layers, Image as ImageIcon, RefreshCw, ChevronRight, ChevronDown, Wand2, Sparkles, BarChart3, Zap } from 'lucide-react';
+import { Plus, Trash2, Download, Layers, Image as ImageIcon, RefreshCw, ChevronRight, ChevronDown, Wand2, Sparkles, BarChart3, Zap, Upload, Edit2, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PFPLayer, PFPLayerVariation } from '@/src/types';
 import { cn } from '@/src/lib/utils';
@@ -25,6 +25,50 @@ export default function PFPGenerator() {
   const removeLayer = (id: string) => {
     setLayers(layers.filter(l => l.id !== id));
     if (activeLayerId === id) setActiveLayerId(null);
+  };
+
+  const updateLayer = (id: string, name: string) => {
+    setLayers(layers.map(l => l.id === id ? { ...l, name } : l));
+  };
+
+  const handleLayerUpload = async (layerId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newVariations: PFPLayerVariation[] = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+        if (data.url) {
+          newVariations.push({
+            id: Math.random().toString(36).substr(2, 9),
+            name: file.name.split('.')[0],
+            image: data.url,
+          });
+        }
+      } catch (error) {
+        console.error("Upload failed:", error);
+      }
+    }
+
+    setLayers(layers.map(layer => {
+      if (layer.id === layerId) {
+        return {
+          ...layer,
+          variations: [...layer.variations, ...newVariations]
+        };
+      }
+      return layer;
+    }));
   };
 
   const addVariation = (layerId: string) => {
@@ -159,17 +203,41 @@ export default function PFPGenerator() {
                   )}
                   onClick={() => setActiveLayerId(activeLayerId === layer.id ? null : layer.id)}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1">
                     {activeLayerId === layer.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    <span className="font-mono font-bold text-sm uppercase">{layer.name}</span>
+                    <input 
+                      type="text"
+                      value={layer.name}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => updateLayer(layer.id, e.target.value)}
+                      className="bg-transparent border-none font-mono font-bold text-sm uppercase focus:ring-0 p-0 w-32"
+                    />
                     <span className="text-[10px] font-mono text-muted">({layer.variations.length} variations)</span>
                   </div>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
-                    className="text-muted hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <input 
+                        type="file"
+                        multiple
+                        onChange={(e) => handleLayerUpload(layer.id, e)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        accept="image/*"
+                      />
+                      <button 
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-2 hover:bg-surface rounded-sm transition-colors text-muted hover:text-accent"
+                        title="Upload Variations"
+                      >
+                        <Upload size={14} />
+                      </button>
+                    </div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
+                      className="p-2 hover:bg-surface rounded-sm transition-colors text-muted hover:text-red-500"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
 
                 <AnimatePresence>

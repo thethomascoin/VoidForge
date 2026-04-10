@@ -151,6 +151,15 @@ function AppContent() {
     });
   };
 
+  const handleDeleteNFT = (id: string) => {
+    if (confirm("Are you sure you want to delete this artifact?")) {
+      setCollection({
+        ...collection,
+        nfts: collection.nfts.filter(nft => nft.id !== id)
+      });
+    }
+  };
+
   const handleClearSelection = () => {
     setCollection({
       ...collection,
@@ -311,7 +320,7 @@ function AppContent() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <ProfilePage />
+              <ProfilePage nfts={collection.nfts} onDeleteNFT={handleDeleteNFT} />
             </motion.div>
           ) : activeTab === 'builder' ? (
             <motion.div

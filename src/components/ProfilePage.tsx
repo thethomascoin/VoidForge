@@ -1,9 +1,15 @@
 import { useBlockchain } from './BlockchainContext';
-import { motion } from 'motion/react';
-import { Calendar, Hash, Shield, Activity, ExternalLink, CheckCircle2, Clock, AlertCircle, User } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Calendar, Hash, Shield, Activity, ExternalLink, CheckCircle2, Clock, AlertCircle, User, Trash2, Layers } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { NFT } from '../types';
 
-export default function ProfilePage() {
+interface ProfilePageProps {
+  nfts: NFT[];
+  onDeleteNFT: (id: string) => void;
+}
+
+export default function ProfilePage({ nfts, onDeleteNFT }: ProfilePageProps) {
   const { user, transactions, connect } = useBlockchain();
 
   if (!user) {
@@ -61,77 +67,140 @@ export default function ProfilePage() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        <div className="lg:col-span-2 space-y-8">
-          <div className="flex items-center justify-between border-b border-border pb-4">
-            <h2 className="font-mono font-bold text-xl uppercase tracking-tight flex items-center gap-3">
-              <Activity size={20} className="text-accent" />
-              Recent Activity
-            </h2>
-          </div>
+        <div className="lg:col-span-2 space-y-12">
+          {/* NFT Inventory */}
+          <section className="space-y-6">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <h2 className="font-mono font-bold text-xl uppercase tracking-tight flex items-center gap-3">
+                <Layers size={20} className="text-accent" />
+                My Artifacts
+              </h2>
+              <span className="text-xs font-mono text-muted uppercase">{nfts.length} Total</span>
+            </div>
 
-          <div className="space-y-4">
-            {transactions.length > 0 ? (
-              transactions.map((tx) => (
-                <motion.div 
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  key={tx.hash}
-                  className="bg-surface border border-border p-4 flex items-center justify-between group hover:border-muted transition-all"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      "p-3 rounded-sm",
-                      tx.status === 'SUCCESS' ? "bg-accent/10 text-accent" : 
-                      tx.status === 'PENDING' ? "bg-yellow-500/10 text-yellow-500" : 
-                      "bg-red-500/10 text-red-500"
-                    )}>
-                      {tx.status === 'SUCCESS' ? <CheckCircle2 size={20} /> : 
-                       tx.status === 'PENDING' ? <Clock size={20} className="animate-spin" /> : 
-                       <AlertCircle size={20} />}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <AnimatePresence mode="popLayout">
+                {nfts.map((nft) => (
+                  <motion.div
+                    key={nft.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-surface border border-border p-4 flex items-center justify-between group hover:border-accent transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-black border border-border overflow-hidden">
+                        <img 
+                          src={nft.metadata.image} 
+                          alt={nft.metadata.name} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div>
+                        <p className="font-mono font-bold text-sm uppercase">{nft.metadata.name}</p>
+                        <p className="text-[10px] font-mono text-muted uppercase">ID: #{nft.tokenId}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-mono font-bold text-sm uppercase">
-                        {tx.type} NFT {tx.tokenId ? `#${tx.tokenId}` : ''}
-                      </p>
-                      <p className="text-[10px] font-mono text-muted uppercase">
-                        {new Date(tx.timestamp).toLocaleString()}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => onDeleteNFT(nft.id)}
+                        className="p-2 text-muted hover:text-red-500 hover:bg-red-500/10 rounded-sm transition-all"
+                        title="Delete Artifact"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <button className="p-2 text-muted hover:text-accent hover:bg-accent/10 rounded-sm transition-all">
+                        <ExternalLink size={16} />
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-mono text-muted hidden md:block">
-                      {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
-                    </span>
-                    <button className="text-muted hover:text-accent transition-colors">
-                      <ExternalLink size={16} />
-                    </button>
-                  </div>
-                </motion.div>
-              ))
-            ) : (
-              <div className="py-12 text-center border border-dashed border-border rounded-sm">
-                <p className="font-mono text-muted uppercase tracking-widest text-sm">No recent transactions</p>
-              </div>
-            )}
-          </div>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {nfts.length === 0 && (
+                <div className="col-span-full py-12 text-center border border-dashed border-border rounded-sm">
+                  <p className="font-mono text-muted uppercase tracking-widest text-sm">No artifacts in inventory</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Recent Activity */}
+          <section className="space-y-6">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <h2 className="font-mono font-bold text-xl uppercase tracking-tight flex items-center gap-3">
+                <Activity size={20} className="text-accent" />
+                Recent Activity
+              </h2>
+            </div>
+
+            <div className="space-y-4">
+              {transactions.length > 0 ? (
+                transactions.map((tx) => (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    key={tx.hash}
+                    className="bg-surface border border-border p-4 flex items-center justify-between group hover:border-muted transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "p-3 rounded-sm",
+                        tx.status === 'SUCCESS' ? "bg-accent/10 text-accent" : 
+                        tx.status === 'PENDING' ? "bg-yellow-500/10 text-yellow-500" : 
+                        "bg-red-500/10 text-red-500"
+                      )}>
+                        {tx.status === 'SUCCESS' ? <CheckCircle2 size={20} /> : 
+                         tx.status === 'PENDING' ? <Clock size={20} className="animate-spin" /> : 
+                         <AlertCircle size={20} />}
+                      </div>
+                      <div>
+                        <p className="font-mono font-bold text-sm uppercase">
+                          {tx.type} NFT {tx.tokenId ? `#${tx.tokenId}` : ''}
+                        </p>
+                        <p className="text-[10px] font-mono text-muted uppercase">
+                          {new Date(tx.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-mono text-muted hidden md:block">
+                        {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
+                      </span>
+                      <button className="text-muted hover:text-accent transition-colors">
+                        <ExternalLink size={16} />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="py-12 text-center border border-dashed border-border rounded-sm">
+                  <p className="font-mono text-muted uppercase tracking-widest text-sm">No recent transactions</p>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
 
         <div className="space-y-8">
-          <h2 className="font-mono font-bold text-xl uppercase tracking-tight">Stats</h2>
-          <div className="grid grid-cols-1 gap-4">
-            <div className="bg-surface border border-border p-6">
-              <p className="text-[10px] font-mono text-muted uppercase mb-1">Total Minted</p>
-              <p className="text-3xl font-mono font-bold text-accent">12</p>
+          <section className="space-y-8">
+            <h2 className="font-mono font-bold text-xl uppercase tracking-tight">Stats</h2>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="bg-surface border border-border p-6">
+                <p className="text-[10px] font-mono text-muted uppercase mb-1">Total Minted</p>
+                <p className="text-3xl font-mono font-bold text-accent">{nfts.length}</p>
+              </div>
+              <div className="bg-surface border border-border p-6">
+                <p className="text-[10px] font-mono text-muted uppercase mb-1">Collections</p>
+                <p className="text-3xl font-mono font-bold">1</p>
+              </div>
+              <div className="bg-surface border border-border p-6">
+                <p className="text-[10px] font-mono text-muted uppercase mb-1">Success Rate</p>
+                <p className="text-3xl font-mono font-bold">100%</p>
+              </div>
             </div>
-            <div className="bg-surface border border-border p-6">
-              <p className="text-[10px] font-mono text-muted uppercase mb-1">Collections</p>
-              <p className="text-3xl font-mono font-bold">3</p>
-            </div>
-            <div className="bg-surface border border-border p-6">
-              <p className="text-[10px] font-mono text-muted uppercase mb-1">Success Rate</p>
-              <p className="text-3xl font-mono font-bold">100%</p>
-            </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>
