@@ -3,7 +3,7 @@ import { useBlockchain } from './BlockchainContext';
 import { cn } from '@/src/lib/utils';
 
 export default function WalletPage() {
-  const { account, connect, transactions, getBlockExplorerUrl } = useBlockchain();
+  const { account, connect, transactions, getBlockExplorerUrl, balance } = useBlockchain();
 
   if (!account) {
     return (
@@ -39,7 +39,7 @@ export default function WalletPage() {
           </div>
           <p className="text-[10px] font-mono text-muted uppercase tracking-widest mb-2">Total Balance</p>
           <div className="flex items-baseline gap-3 mb-8">
-            <span className="text-5xl font-mono font-bold">12.45</span>
+            <span className="text-5xl font-mono font-bold">{parseFloat(balance).toFixed(4)}</span>
             <span className="text-xl font-mono text-accent">ETH</span>
           </div>
           <div className="flex gap-4">

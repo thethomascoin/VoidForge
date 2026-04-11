@@ -8,9 +8,12 @@ interface SidebarProps {
   connect: () => void;
   isOpen?: boolean;
   onClose?: () => void;
+  user?: any;
+  onLogin?: () => void;
+  onLogout?: () => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, account, connect, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, account, connect, isOpen, onClose, user, onLogin, onLogout }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'builder', label: 'Collection Builder', icon: PlusCircle },
@@ -39,10 +42,19 @@ export default function Sidebar({ activeTab, setActiveTab, account, connect, isO
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 flex items-center justify-center overflow-hidden rounded-sm">
               <img 
-                src="https://picsum.photos/seed/voidforge/200/200" 
+                src="/logo.png" 
                 alt="Voidforge Logo" 
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  // Fallback to SVG if logo.png is not found, then to picsum
+                  const img = e.target as HTMLImageElement;
+                  if (img.src.endsWith('.png')) {
+                    img.src = "/logo.svg";
+                  } else if (img.src.endsWith('.svg')) {
+                    img.src = "https://picsum.photos/seed/voidforge/200/200";
+                  }
+                }}
               />
             </div>
             <span className="font-mono font-bold text-xl tracking-tighter">VOIDFORGE</span>
@@ -81,12 +93,37 @@ export default function Sidebar({ activeTab, setActiveTab, account, connect, isO
           <button 
             onClick={connect}
             className={cn(
-              "w-full py-2 font-mono text-[10px] uppercase tracking-wider border transition-all",
+              "w-full py-2 font-mono text-[10px] uppercase tracking-wider border transition-all mb-2",
               account ? "border-accent text-accent" : "border-muted text-muted hover:border-ink hover:text-ink"
             )}
           >
             {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"}
           </button>
+
+          {!user && onLogin && (
+            <button 
+              onClick={onLogin}
+              className="w-full py-2 font-mono text-[10px] uppercase tracking-wider border border-accent bg-accent text-bg hover:bg-ink hover:text-accent transition-all"
+            >
+              Sign In with Google
+            </button>
+          )}
+          {user && (
+            <div className="space-y-2 mt-4">
+              <div className="flex items-center gap-2">
+                <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full" />
+                <span className="text-[10px] font-mono text-muted truncate">{user.displayName}</span>
+              </div>
+              {onLogout && (
+                <button 
+                  onClick={onLogout}
+                  className="w-full py-1 font-mono text-[8px] uppercase tracking-wider border border-border text-muted hover:text-red-500 hover:border-red-500 transition-all"
+                >
+                  Sign Out
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </aside>

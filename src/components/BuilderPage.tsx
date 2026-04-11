@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Rocket, Shield, Info, Loader2, CheckCircle2, Settings2, ExternalLink, Globe, Share2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBlockchain } from './BlockchainContext';
 import { GoogleGenAI } from "@google/genai";
+import { ethers } from 'ethers';
 
-export default function BuilderPage() {
+import { auth } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+
+interface BuilderPageProps {
+  onCreateCollection: (data: any) => void;
+  onLogin: () => void;
+  user: any;
+}
+
+export default function BuilderPage({ onCreateCollection, onLogin, user }: BuilderPageProps) {
   const { addTransaction, account, connect, getBlockExplorerUrl } = useBlockchain();
   const [step, setStep] = useState<'form' | 'deploying' | 'success'>('form');
   const [isGeneratingLore, setIsGeneratingLore] = useState(false);
@@ -48,13 +58,15 @@ export default function BuilderPage() {
       return;
     }
     setStep('deploying');
-    const hash = await addTransaction('MINT'); // Simulate deployment transaction
-    const mockAddress = '0x' + Math.random().toString(16).slice(2, 42);
-    setDeployedAddress(mockAddress);
+    
+    // Actually create the collection in the app state (which now saves to Firestore)
+    const address = await onCreateCollection(collectionData);
+    setDeployedAddress(address);
+    
     setStep('success');
   };
 
-  if (!account) {
+  if (!account || !user) {
     return (
       <div className="flex flex-col items-center justify-center h-[70vh] space-y-6">
         <div className="w-20 h-20 bg-surface border border-border flex items-center justify-center rounded-sm">
@@ -62,11 +74,27 @@ export default function BuilderPage() {
         </div>
         <div className="text-center space-y-2">
           <h2 className="font-mono font-bold text-2xl uppercase">Builder Locked</h2>
-          <p className="text-muted font-mono text-sm max-w-xs">Connect your wallet to deploy new NFT collections to the blockchain.</p>
+          <p className="text-muted font-mono text-sm max-w-xs">
+            {!account && !user ? "Connect your wallet and sign in to deploy new NFT collections." : 
+             !account ? "Connect your Ethereum wallet to deploy collections to the blockchain." :
+             "Sign in with Google to save your collections to the database."}
+          </p>
         </div>
-        <button onClick={connect} className="btn-primary px-8 py-3">
-          Connect Wallet
-        </button>
+        <div className="flex gap-4">
+          {!account && (
+            <button onClick={connect} className="btn-primary px-8 py-3">
+              Connect Wallet
+            </button>
+          )}
+          {!user && (
+            <button 
+              onClick={onLogin} 
+              className="btn-outline px-8 py-3"
+            >
+              Sign In
+            </button>
+          )}
+        </div>
       </div>
     );
   }

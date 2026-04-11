@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "Collection": {
+      "title": "Collection",
+      "description": "An NFT collection deployed by a user",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the collection" },
+        "symbol": { "type": "string", "description": "Symbol of the collection" },
+        "address": { "type": "string", "description": "Contract address" },
+        "owner": { "type": "string", "description": "UID of the owner" },
+        "createdAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["name", "symbol", "address", "owner", "createdAt"]
+    },
+    "NFT": {
+      "title": "NFT",
+      "description": "An individual NFT within a collection",
+      "type": "object",
+      "properties": {
+        "tokenId": { "type": "number", "description": "Token ID" },
+        "collectionAddress": { "type": "string", "description": "Address of the parent collection" },
+        "owner": { "type": "string", "description": "Address of the current owner" },
+        "mintedAt": { "type": "number", "description": "Timestamp" },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "image": { "type": "string" },
+            "attributes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "trait_type": { "type": "string" },
+                  "value": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": ["tokenId", "collectionAddress", "owner", "mintedAt", "metadata"]
+    }
+  },
+  "firestore": {
+    "/collections/{collectionId}": {
+      "schema": "Collection",
+      "description": "Root collections"
+    },
+    "/nfts/{nftId}": {
+      "schema": "NFT",
+      "description": "Individual NFTs"
+    }
+  }
+}

@@ -1,10 +1,62 @@
-import { Settings, Shield, Globe, Bell, Cpu, Database, Key } from 'lucide-react';
+import { Settings, Shield, Globe, Bell, Cpu, Database, Key, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import { useBlockchain } from './BlockchainContext';
+import { useState, useEffect } from 'react';
 
 export default function SettingsPage() {
   const { account, chainId } = useBlockchain();
+  const [dbStatus, setDbStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+
+  const checkConnection = async () => {
+    setDbStatus('checking');
+    try {
+      const res = await fetch('/api/collections');
+      if (res.ok) {
+        setDbStatus('online');
+      } else {
+        setDbStatus('offline');
+      }
+    } catch (error) {
+      setDbStatus('offline');
+    }
+  };
+
+  useEffect(() => {
+    checkConnection();
+  }, []);
 
   const sections = [
+    {
+      title: "Local Infrastructure",
+      icon: Database,
+      items: [
+        { 
+          label: "Database Status", 
+          value: (
+            <div className="flex items-center gap-2">
+              {dbStatus === 'checking' && <RefreshCw size={14} className="animate-spin text-muted" />}
+              {dbStatus === 'online' && <CheckCircle2 size={14} className="text-accent" />}
+              {dbStatus === 'offline' && <XCircle size={14} className="text-red-500" />}
+              <span className={
+                dbStatus === 'online' ? "text-accent" : 
+                dbStatus === 'offline' ? "text-red-500" : 
+                "text-muted"
+              }>
+                {dbStatus.toUpperCase()}
+              </span>
+              <button 
+                onClick={checkConnection}
+                className="ml-2 p-1 hover:bg-border rounded-sm transition-colors"
+                title="Retry Connection"
+              >
+                <RefreshCw size={12} />
+              </button>
+            </div>
+          )
+        },
+        { label: "Engine", value: "SQLite 3 (Persistent)" },
+        { label: "Storage", value: "Local File System" },
+      ]
+    },
     {
       title: "Network Configuration",
       icon: Globe,

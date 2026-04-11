@@ -1,8 +1,11 @@
 import { useBlockchain } from './BlockchainContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Hash, Shield, Activity, ExternalLink, CheckCircle2, Clock, AlertCircle, User, Trash2, Layers } from 'lucide-react';
+import { Calendar, Hash, Shield, Activity, ExternalLink, CheckCircle2, Clock, AlertCircle, User, Trash2, Layers, LogIn } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { NFT } from '../types';
+import { auth, signInWithPopup, googleProvider } from '../firebase';
+import { useState, useEffect } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface ProfilePageProps {
   nfts: NFT[];
@@ -10,7 +13,23 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ nfts, onDeleteNFT }: ProfilePageProps) {
-  const { user, transactions, connect } = useBlockchain();
+  const { transactions, connect, account } = useBlockchain();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const login = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed:", error);
+    }
+  };
 
   if (!user) {
     return (
@@ -19,15 +38,31 @@ export default function ProfilePage({ nfts, onDeleteNFT }: ProfilePageProps) {
           <User size={40} className="text-muted" />
         </div>
         <div className="text-center space-y-2">
-          <h2 className="font-mono font-bold text-2xl uppercase">Wallet Not Connected</h2>
-          <p className="text-muted font-mono text-sm">Connect your wallet to view your profile and activity.</p>
+          <h2 className="font-mono font-bold text-2xl uppercase">Identity Not Verified</h2>
+          <p className="text-muted font-mono text-sm">Sign in to view your profile and activity.</p>
         </div>
-        <button onClick={connect} className="btn-primary px-8 py-3">
-          Connect Wallet
-        </button>
+        <div className="flex gap-4">
+          <button onClick={login} className="btn-primary px-8 py-3 flex items-center gap-2">
+            <LogIn size={18} />
+            Sign In with Google
+          </button>
+          {!account && (
+            <button onClick={connect} className="btn-outline px-8 py-3">
+              Connect Wallet
+            </button>
+          )}
+        </div>
       </div>
     );
   }
+
+  const profileData = {
+    name: user.displayName || "Web3 Navigator",
+    bio: "Pioneer of the digital void. Architect of neon-brutalist artifacts.",
+    avatar: user.photoURL || `https://api.dicebear.com/7.x/identicon/svg?seed=${user.uid}`,
+    address: account || "Wallet Not Connected",
+    joinedAt: user.metadata.creationTime ? new Date(user.metadata.creationTime).getTime() : Date.now()
+  };
 
   return (
     <div className="max-w-5xl mx-auto py-12 px-6">
@@ -35,8 +70,8 @@ export default function ProfilePage({ nfts, onDeleteNFT }: ProfilePageProps) {
         <div className="relative">
           <div className="w-32 h-32 border-2 border-accent p-1 rounded-sm rotate-3">
             <img 
-              src={user.avatar} 
-              alt={user.name} 
+              src={profileData.avatar} 
+              alt={profileData.name} 
               className="w-full h-full object-cover -rotate-3 border border-border"
               referrerPolicy="no-referrer"
             />
@@ -47,16 +82,16 @@ export default function ProfilePage({ nfts, onDeleteNFT }: ProfilePageProps) {
         </div>
 
         <div className="flex-1">
-          <h1 className="text-4xl font-mono font-bold uppercase tracking-tighter mb-2">{user.name}</h1>
-          <p className="text-muted font-mono text-sm mb-4 max-w-xl">{user.bio}</p>
+          <h1 className="text-4xl font-mono font-bold uppercase tracking-tighter mb-2">{profileData.name}</h1>
+          <p className="text-muted font-mono text-sm mb-4 max-w-xl">{profileData.bio}</p>
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2 text-[10px] font-mono text-muted uppercase">
               <Hash size={12} className="text-accent" />
-              {user.address}
+              {profileData.address}
             </div>
             <div className="flex items-center gap-2 text-[10px] font-mono text-muted uppercase">
               <Calendar size={12} className="text-accent" />
-              Joined {new Date(user.joinedAt).toLocaleDateString()}
+              Joined {new Date(profileData.joinedAt).toLocaleDateString()}
             </div>
           </div>
         </div>

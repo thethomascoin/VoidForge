@@ -1,21 +1,24 @@
 import React, { useState } from 'react';
 import { X, Plus, Image as ImageIcon, Loader2, CheckCircle2, Upload, File as FileIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { NFTMetadata } from '@/src/types';
+import { NFTMetadata, Collection } from '@/src/types';
 import { useBlockchain } from './BlockchainContext';
 
 interface MintModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onMint: (metadata: NFTMetadata) => void;
+  onMint: (metadata: NFTMetadata, collectionAddress: string) => void;
+  collections: Collection[];
+  activeCollectionAddress: string;
 }
 
-export default function MintModal({ isOpen, onClose, onMint }: MintModalProps) {
+export default function MintModal({ isOpen, onClose, onMint, collections, activeCollectionAddress }: MintModalProps) {
   const [metadata, setMetadata] = useState<NFTMetadata>({
     name: '',
     description: '',
     image: 'https://picsum.photos/seed/nft/800/800',
   });
+  const [targetCollectionAddress, setTargetCollectionAddress] = useState(activeCollectionAddress);
   const [step, setStep] = useState<'form' | 'minting' | 'success'>('form');
   const [txHash, setTxHash] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -34,6 +37,12 @@ export default function MintModal({ isOpen, onClose, onMint }: MintModalProps) {
         method: 'POST',
         body: formData,
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status: ${response.status}`);
+      }
+
       const data = await response.json();
       if (data.url) {
         setMetadata(prev => ({ ...prev, image: data.url }));
@@ -43,6 +52,7 @@ export default function MintModal({ isOpen, onClose, onMint }: MintModalProps) {
       alert("Failed to upload file. Please try again.");
     } finally {
       setIsUploading(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -61,10 +71,14 @@ export default function MintModal({ isOpen, onClose, onMint }: MintModalProps) {
 
       // 2. Mint on chain with the metadata URL
       // In a real app, we'd pass 'url' to the contract's mint function
-      const hash = await addTransaction('MINT');
+      // The actual minting logic is now handled in App.tsx via onMint
+      await onMint({ ...metadata, image: url || metadata.image }, targetCollectionAddress);
       
+      // We'll get the txHash from the blockchain context if we were doing real txs
+      // For now, we'll just use a placeholder or the one from addTransaction if we still want to show it
+      const hash = await addTransaction('MINT');
       setTxHash(hash);
-      onMint(metadata);
+      
       setStep('success');
     } catch (error) {
       console.error(error);
@@ -120,6 +134,19 @@ export default function MintModal({ isOpen, onClose, onMint }: MintModalProps) {
                     className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8"
                   >
                   <div className="space-y-6">
+                    <div>
+                      <label className="text-xs font-mono text-muted uppercase block mb-2">Target Collection</label>
+                      <select 
+                        value={targetCollectionAddress}
+                        onChange={(e) => setTargetCollectionAddress(e.target.value)}
+                        className="input-field w-full text-xs uppercase font-mono"
+                      >
+                        {collections.map(c => (
+                          <option key={c.address} value={c.address}>{c.name} ({c.symbol})</option>
+                        ))}
+                      </select>
+                    </div>
+
                     <div>
                       <label className="text-xs font-mono text-muted uppercase block mb-2">NFT Name</label>
                       <input 

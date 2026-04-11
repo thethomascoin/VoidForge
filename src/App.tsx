@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import NFTCard from './components/NFTCard';
 import MintModal from './components/MintModal';
+import BatchUpdateModal from './components/BatchUpdateModal';
 import ProfilePage from './components/ProfilePage';
 import BuilderPage from './components/BuilderPage';
 import PFPGenerator from './components/PFPGenerator';
@@ -12,6 +13,15 @@ import { Collection, NFT, NFTMetadata } from './types';
 import { Plus, Search, Filter, RefreshCw, AlertCircle, Menu, Activity, Zap, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BlockchainProvider, useBlockchain } from './components/BlockchainContext';
+import { ethers } from 'ethers';
+import { auth, signInWithPopup, googleProvider, onAuthStateChanged } from './firebase';
+
+const INITIAL_COLLECTION: Collection = {
+  name: "Neo-Brutalist Artifacts",
+  symbol: "NBA",
+  address: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+  nfts: []
+};
 
 const VoidBackground = () => (
   <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -75,121 +85,266 @@ const LiveFeed = () => {
   );
 };
 
-const INITIAL_COLLECTION: Collection = {
-  name: "Neo-Brutalist Artifacts",
-  symbol: "NBA",
-  address: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-  nfts: [
-    {
-      id: "1",
-      tokenId: 1,
-      owner: "0xhalvsiebobb...productions",
-      mintedAt: Date.now() - 86400000,
-      metadata: {
-        name: "Cyber Monolith",
-        description: "A digital relic from the early 21st century, preserved in the silicon wastes.",
-        image: "https://picsum.photos/seed/cyber1/800/800"
-      }
-    },
-    {
-      id: "2",
-      tokenId: 2,
-      owner: "0xhalvsiebobb...productions",
-      mintedAt: Date.now() - 43200000,
-      metadata: {
-        name: "Void Fragment",
-        description: "A piece of the architectural void, manifesting as a geometric anomaly.",
-        image: "https://picsum.photos/seed/void2/800/800"
-      }
-    }
-  ]
-};
-
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [collection, setCollection] = useState<Collection>(INITIAL_COLLECTION);
+  const [collections, setCollections] = useState<Collection[]>([INITIAL_COLLECTION]);
+  const [activeCollectionAddress, setActiveCollectionAddress] = useState(INITIAL_COLLECTION.address);
   const [isMintModalOpen, setIsMintModalOpen] = useState(false);
+  const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [user, setUser] = useState<any>(null);
   const { addTransaction, account, connect } = useBlockchain();
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const login = async () => {
+    console.log("Login triggered", { auth: !!auth, googleProvider: !!googleProvider });
+    if (!auth || !googleProvider) {
+      alert("Firebase is not initialized correctly. Please check your configuration.");
+      return;
+    }
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user) {
+        setUser(result.user);
+        console.log("Login success:", result.user.email);
+      }
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      alert(`Login failed: ${error.message}`);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await auth.signOut();
+      console.log("Logout success");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  // Sync Collections from API
+  const fetchCollections = useCallback(async () => {
+    try {
+      const res = await fetch('/api/collections');
+      const fetchedCollections = await res.json();
+      
+      setCollections(prev => {
+        const merged = [...fetchedCollections];
+        if (!merged.find((c: any) => c.address === INITIAL_COLLECTION.address)) {
+          merged.push(INITIAL_COLLECTION);
+        }
+        return merged;
+      });
+    } catch (error) {
+      console.error("Error fetching collections:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCollections();
+  }, [fetchCollections]);
+
+  // Sync NFTs for active collection
+  const fetchNFTs = useCallback(async () => {
+    if (!activeCollectionAddress) return;
+    try {
+      const res = await fetch(`/api/nfts?collectionAddress=${activeCollectionAddress}`);
+      const fetchedNFTs = await res.json();
+      
+      setCollections(prev => prev.map(c => 
+        c.address === activeCollectionAddress ? { ...c, nfts: fetchedNFTs } : c
+      ));
+    } catch (error) {
+      console.error("Error fetching NFTs:", error);
+    }
+  }, [activeCollectionAddress]);
+
+  useEffect(() => {
+    fetchNFTs();
+  }, [fetchNFTs]);
+
+  const activeCollection = useMemo(() => 
+    collections.find(c => c.address === activeCollectionAddress) || collections[0]
+  , [collections, activeCollectionAddress]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setIsMobileMenuOpen(false);
   };
 
-  const handleMint = (metadata: NFTMetadata) => {
-    const newNFT: NFT = {
-      id: Math.random().toString(36).substr(2, 9),
-      tokenId: collection.nfts.length + 1,
-      owner: "0xhalvsiebobb...productions",
-      mintedAt: Date.now(),
-      metadata,
-      isSelected: false
+  const handleCreateCollection = async (data: Partial<Collection>) => {
+    if (!user) {
+      alert("Please sign in to create a collection.");
+      return;
+    }
+    const address = ethers.getAddress(ethers.hexlify(ethers.randomBytes(20)));
+    const newCollection = {
+      name: data.name || "Untitled Collection",
+      symbol: data.symbol || "NFT",
+      address,
+      owner: user.uid,
+      createdAt: Date.now()
     };
-    setCollection({
-      ...collection,
-      nfts: [newNFT, ...collection.nfts]
-    });
+    
+    try {
+      const res = await fetch('/api/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCollection)
+      });
+      if (res.ok) {
+        await fetchCollections();
+        setActiveCollectionAddress(address);
+        return address;
+      }
+    } catch (error) {
+      console.error("Error creating collection:", error);
+    }
   };
 
-  const handleUpdateNFT = (tokenId: number, newMetadata: NFTMetadata) => {
-    setCollection({
-      ...collection,
-      nfts: collection.nfts.map(nft => 
-        nft.tokenId === tokenId ? { ...nft, metadata: newMetadata } : nft
-      )
-    });
+  const handleMint = async (metadata: NFTMetadata, collectionAddress?: string) => {
+    if (!user) {
+      alert("Please sign in to mint.");
+      return;
+    }
+    const targetAddress = collectionAddress || activeCollectionAddress;
+    const newNFT = {
+      tokenId: (activeCollection.nfts.length || 0) + 1,
+      owner: account || "0x...",
+      mintedAt: Date.now(),
+      metadata,
+      collectionAddress: targetAddress
+    };
+
+    try {
+      const res = await fetch('/api/nfts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newNFT)
+      });
+      if (res.ok) {
+        await fetchNFTs();
+        await addTransaction('MINT');
+      }
+    } catch (error) {
+      console.error("Error minting NFT:", error);
+    }
+  };
+
+  const handleUpdateNFT = async (tokenId: number, newMetadata: NFTMetadata) => {
+    const nftToUpdate = activeCollection.nfts.find(n => n.tokenId === tokenId);
+    if (!nftToUpdate) return;
+
+    try {
+      const res = await fetch(`/api/nfts/${nftToUpdate.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metadata: newMetadata })
+      });
+      if (res.ok) {
+        await fetchNFTs();
+        await addTransaction('UPDATE', tokenId);
+      }
+    } catch (error) {
+      console.error("Error updating NFT:", error);
+    }
+  };
+
+  const handleBatchUpdate = async (metadata: Partial<NFTMetadata>) => {
+    const selectedNFTs = activeCollection.nfts.filter(n => n.isSelected);
+    
+    try {
+      await Promise.all(selectedNFTs.map(async (nft) => {
+        const updatedMetadata = { ...nft.metadata };
+        if (metadata.description) updatedMetadata.description = metadata.description;
+        if (metadata.attributes && metadata.attributes.length > 0) {
+          updatedMetadata.attributes = [...(updatedMetadata.attributes || []), ...metadata.attributes];
+        }
+        
+        return fetch(`/api/nfts/${nft.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ metadata: updatedMetadata })
+        });
+      }));
+      
+      await fetchNFTs();
+      setIsBatchUpdateModalOpen(false);
+      handleClearSelection();
+    } catch (error) {
+      console.error("Error in batch update:", error);
+    }
   };
 
   const handleToggleSelect = (id: string) => {
-    setCollection({
-      ...collection,
-      nfts: collection.nfts.map(nft => 
-        nft.id === id ? { ...nft, isSelected: !nft.isSelected } : nft
-      )
-    });
+    setCollections(prev => prev.map(c => 
+      c.address === activeCollectionAddress ? {
+        ...c,
+        nfts: c.nfts.map(nft => nft.id === id ? { ...nft, isSelected: !nft.isSelected } : nft)
+      } : c
+    ));
   };
 
-  const handleDeleteNFT = (id: string) => {
-    if (confirm("Are you sure you want to delete this artifact?")) {
-      setCollection({
-        ...collection,
-        nfts: collection.nfts.filter(nft => nft.id !== id)
-      });
+  const handleDeleteNFT = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this artifact?")) {
+      try {
+        const res = await fetch(`/api/nfts/${id}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          await fetchNFTs();
+        }
+      } catch (error) {
+        console.error("Error deleting NFT:", error);
+      }
     }
   };
 
   const handleClearSelection = () => {
-    setCollection({
-      ...collection,
-      nfts: collection.nfts.map(nft => ({ ...nft, isSelected: false }))
-    });
+    setCollections(prev => prev.map(c => 
+      c.address === activeCollectionAddress ? {
+        ...c,
+        nfts: c.nfts.map(nft => ({ ...nft, isSelected: false }))
+      } : c
+    ));
   };
 
   const handleBatchDelete = async () => {
-    const selectedIds = collection.nfts.filter(n => n.isSelected).map(n => n.id);
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} artifacts?`)) {
-      setCollection({
-        ...collection,
-        nfts: collection.nfts.filter(nft => !nft.isSelected)
-      });
+    const selectedNFTs = activeCollection.nfts.filter(n => n.isSelected);
+    if (window.confirm(`Are you sure you want to delete ${selectedNFTs.length} artifacts?`)) {
+      try {
+        await Promise.all(selectedNFTs.map(async (nft) => {
+          return fetch(`/api/nfts/${nft.id}`, {
+            method: 'DELETE'
+          });
+        }));
+        await fetchNFTs();
+        handleClearSelection();
+      } catch (error) {
+        console.error("Error in batch delete:", error);
+      }
     }
   };
 
-  const handleBatchUpdate = async () => {
-    const selectedCount = collection.nfts.filter(n => n.isSelected).length;
-    await addTransaction('UPDATE');
-    alert(`Batch update simulation for ${selectedCount} artifacts triggered.`);
-    handleClearSelection();
+  const handleBatchUpdateTrigger = async () => {
+    setIsBatchUpdateModalOpen(true);
   };
 
-  const filteredNFTs = collection.nfts.filter(nft => 
+  const filteredNFTs = activeCollection.nfts.filter(nft => 
     nft.metadata.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     nft.metadata.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const selectedCount = useMemo(() => collection.nfts.filter(n => n.isSelected).length, [collection.nfts]);
+  const selectedCount = useMemo(() => activeCollection.nfts.filter(n => n.isSelected).length, [activeCollection.nfts]);
 
   return (
     <div className="flex min-h-screen bg-bg text-ink selection:bg-accent selection:text-bg relative">
@@ -201,6 +356,9 @@ function AppContent() {
         connect={connect}
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        user={user}
+        onLogin={login}
+        onLogout={logout}
       />
       
       <main className="flex-1 overflow-y-auto relative z-10">
@@ -209,10 +367,18 @@ function AppContent() {
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 flex items-center justify-center overflow-hidden rounded-sm">
               <img 
-                src="https://picsum.photos/seed/voidforge/200/200" 
+                src="/logo.png" 
                 alt="Voidforge Logo" 
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  if (img.src.endsWith('.png')) {
+                    img.src = "/logo.svg";
+                  } else if (img.src.endsWith('.svg')) {
+                    img.src = "https://picsum.photos/seed/voidforge/200/200";
+                  }
+                }}
               />
             </div>
             <span className="font-mono font-bold text-lg tracking-tighter">VOIDFORGE</span>
@@ -241,11 +407,22 @@ function AppContent() {
                     <div className="h-[1px] w-8 bg-border" />
                   </div>
                   <h1 className="text-3xl md:text-5xl font-mono font-bold uppercase tracking-tighter mb-4">
-                    {collection.name}
+                    {activeCollection.name}
                   </h1>
                   <div className="flex flex-wrap items-center gap-4 font-mono text-xs">
-                    <span className="text-muted">Symbol: <span className="text-ink">{collection.symbol}</span></span>
-                    <span className="text-muted">Address: <span className="text-accent">{collection.address.slice(0, 6)}...{collection.address.slice(-4)}</span></span>
+                    <span className="text-muted">Symbol: <span className="text-ink">{activeCollection.symbol}</span></span>
+                    <span className="text-muted">Address: <span className="text-accent">{activeCollection.address.slice(0, 6)}...{activeCollection.address.slice(-4)}</span></span>
+                    {collections.length > 1 && (
+                      <select 
+                        value={activeCollectionAddress}
+                        onChange={(e) => setActiveCollectionAddress(e.target.value)}
+                        className="bg-surface border border-border px-2 py-1 text-[10px] uppercase font-mono focus:ring-1 focus:ring-accent outline-none"
+                      >
+                        {collections.map(c => (
+                          <option key={c.address} value={c.address}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
 
@@ -320,7 +497,7 @@ function AppContent() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <ProfilePage nfts={collection.nfts} onDeleteNFT={handleDeleteNFT} />
+              <ProfilePage nfts={activeCollection.nfts} onDeleteNFT={handleDeleteNFT} />
             </motion.div>
           ) : activeTab === 'builder' ? (
             <motion.div
@@ -329,7 +506,11 @@ function AppContent() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <BuilderPage />
+              <BuilderPage 
+                onCreateCollection={handleCreateCollection} 
+                onLogin={login}
+                user={user}
+              />
             </motion.div>
           ) : activeTab === 'pfp' ? (
             <motion.div
@@ -384,13 +565,22 @@ function AppContent() {
         selectedCount={selectedCount}
         onClear={handleClearSelection}
         onDelete={handleBatchDelete}
-        onUpdate={handleBatchUpdate}
+        onUpdate={handleBatchUpdateTrigger}
       />
 
       <MintModal 
         isOpen={isMintModalOpen} 
         onClose={() => setIsMintModalOpen(false)} 
         onMint={handleMint}
+        collections={collections}
+        activeCollectionAddress={activeCollectionAddress}
+      />
+
+      <BatchUpdateModal
+        isOpen={isBatchUpdateModalOpen}
+        onClose={() => setIsBatchUpdateModalOpen(false)}
+        onUpdate={handleBatchUpdate}
+        selectedCount={selectedCount}
       />
     </div>
   );

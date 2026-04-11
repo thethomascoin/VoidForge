@@ -14,6 +14,7 @@ interface BlockchainContextType {
   user: UserProfile | null;
   account: string | null;
   chainId: string | null;
+  balance: string;
   connect: () => Promise<void>;
   addTransaction: (type: Transaction['type'], tokenId?: number) => Promise<string>;
   updateTransactionStatus: (hash: string, status: Transaction['status']) => void;
@@ -29,6 +30,8 @@ export function BlockchainProvider({ children }: { children: React.ReactNode }) 
   const [chainId, setChainId] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
 
+  const [balance, setBalance] = useState<string>('0.00');
+
   const connect = useCallback(async () => {
     if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
       try {
@@ -39,14 +42,20 @@ export function BlockchainProvider({ children }: { children: React.ReactNode }) 
         const chainId = await window.ethereum.request({ method: 'eth_chainId' });
         
         if (accounts && accounts.length > 0) {
-          setAccount(accounts[0]);
+          const address = accounts[0];
+          setAccount(address);
           setChainId(chainId);
           
+          // Fetch real balance
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const balanceWei = await provider.getBalance(address);
+          setBalance(ethers.formatEther(balanceWei));
+          
           setUser({
-            address: accounts[0],
+            address: address,
             name: "Web3 User",
             bio: "Connected via Ethereum Wallet",
-            avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${accounts[0]}`,
+            avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`,
             joinedAt: Date.now(),
           });
         }
@@ -66,26 +75,40 @@ export function BlockchainProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (typeof window.ethereum !== 'undefined') {
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+
+      const updateBalance = async (address: string) => {
+        try {
+          const balanceWei = await provider.getBalance(address);
+          setBalance(ethers.formatEther(balanceWei));
+        } catch (e) {
+          console.error("Balance fetch error:", e);
+        }
+      };
+
+      window.ethereum.on('accountsChanged', async (accounts: string[]) => {
         if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          setUser(prev => prev ? { ...prev, address: accounts[0], avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${accounts[0]}` } : null);
+          const address = accounts[0];
+          setAccount(address);
+          updateBalance(address);
+          setUser(prev => prev ? { ...prev, address: address, avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${address}` } : null);
         } else {
           setAccount(null);
+          setBalance('0.00');
           setUser(null);
         }
       });
 
       window.ethereum.on('chainChanged', (id: string) => {
         setChainId(id);
+        if (account) updateBalance(account);
       });
     }
-  }, []);
+  }, [account]);
 
   const addTransaction = useCallback(async (type: Transaction['type'], tokenId?: number): Promise<string> => {
-    // This is still a simulation for the "hash" part if we don't have a contract,
-    // but the context is now ready for real ethers calls.
-    const hash = '0x' + Math.random().toString(16).slice(2, 66);
+    // Generate a valid-looking mock hash
+    const hash = ethers.hexlify(ethers.randomBytes(32));
     const newTx: Transaction = {
       hash,
       type,
@@ -135,6 +158,7 @@ export function BlockchainProvider({ children }: { children: React.ReactNode }) 
       user, 
       account, 
       chainId, 
+      balance,
       connect, 
       addTransaction, 
       updateTransactionStatus,

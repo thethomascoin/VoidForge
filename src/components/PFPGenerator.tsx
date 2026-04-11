@@ -9,6 +9,7 @@ export default function PFPGenerator() {
   const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
   const [combinations, setCombinations] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [uploadingLayerId, setUploadingLayerId] = useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -35,40 +36,60 @@ export default function PFPGenerator() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const newVariations: PFPLayerVariation[] = [];
+    setUploadingLayerId(layerId);
     
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const formData = new FormData();
-      formData.append('file', file);
+    try {
+      const uploadPromises = Array.from(files).map(async (fileItem) => {
+        const file = fileItem as File;
+        const formData = new FormData();
+        formData.append('file', file);
 
-      try {
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await response.json();
-        if (data.url) {
-          newVariations.push({
-            id: Math.random().toString(36).substr(2, 9),
-            name: file.name.split('.')[0],
-            image: data.url,
+        try {
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
           });
-        }
-      } catch (error) {
-        console.error("Upload failed:", error);
-      }
-    }
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Upload failed with status: ${response.status}`);
+          }
 
-    setLayers(layers.map(layer => {
-      if (layer.id === layerId) {
-        return {
-          ...layer,
-          variations: [...layer.variations, ...newVariations]
-        };
+          const data = await response.json();
+          if (data.url) {
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              name: file.name.split('.')[0],
+              image: data.url,
+            } as PFPLayerVariation;
+          }
+        } catch (error) {
+          console.error(`Upload failed for file: ${file.name}`, error);
+          return null;
+        }
+        return null;
+      });
+
+      const results = await Promise.all(uploadPromises);
+      const newVariations = results.filter((v): v is PFPLayerVariation => v !== null);
+
+      if (newVariations.length > 0) {
+        setLayers(prevLayers => prevLayers.map(layer => {
+          if (layer.id === layerId) {
+            return {
+              ...layer,
+              variations: [...layer.variations, ...newVariations]
+            };
+          }
+          return layer;
+        }));
       }
-      return layer;
-    }));
+    } catch (error) {
+      console.error("Batch upload failed:", error);
+    } finally {
+      setUploadingLayerId(null);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const addVariation = (layerId: string) => {
@@ -225,10 +246,13 @@ export default function PFPGenerator() {
                       />
                       <button 
                         onClick={(e) => e.stopPropagation()}
-                        className="p-2 hover:bg-surface rounded-sm transition-colors text-muted hover:text-accent"
+                        className={cn(
+                          "p-2 hover:bg-surface rounded-sm transition-colors text-muted hover:text-accent",
+                          uploadingLayerId === layer.id && "animate-pulse text-accent"
+                        )}
                         title="Upload Variations"
                       >
-                        <Upload size={14} />
+                        {uploadingLayerId === layer.id ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                       </button>
                     </div>
                     <button 
